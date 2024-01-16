@@ -1,1 +1,1 @@
-# Domain-informed-Models-for-Degradation-and-Prognostics-in-Hydro-Components
+# Domain-informed Models for Degradation and Prognostics in Hydro Components
