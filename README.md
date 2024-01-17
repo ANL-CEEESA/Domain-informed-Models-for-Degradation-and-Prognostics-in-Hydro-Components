@@ -6,62 +6,54 @@
 
 ![image](https://github.com/ANL-CEEESA/Domain-informed-Models-for-Degradation-and-Prognostics-in-Hydro-Components/assets/62155196/f7b34382-cfe6-4aa4-8296-81a1cb24e431)
 
+This is the code used for domain informed degradation detection and prognostics for HRI dataset. The current version of the code utilized operational data and performs analysis on the turbine's guide bearings. 
+
+Dataset used: a) Vibration data from Turbine Guide Bearings, and b) Power data from Turbine Guide Bearings
+
+The code has three submodules: 
+1. Raw Data Preprocessing 
+2. Degradation Detection 
+3. RUL Estimation 
+### RAW DATA PREPROCESSING:
+
+Raw data from the HRI dataset contains anomalous reading and data from non-operational time period of the powerhouse. Therefore, a preprocessing of the raw data is needed to ensure a smooth data profile before proceeding with the analysis. 
+
+The raw data preprocessing is done using RUL_Estimation/preprocessing.py code. It involves changing the timestamps to a python readable time format, and removing the unusually low or high vibration/power readings from the data. The code contains comment and is easily interpretable. 
 
 
-## Sample Usage
+### DEGRADATION DETECTION 
 
-```python
-# Import Gurobi optimization package
-from gurobipy import *
+#### PREPROCESSING 
+The preprocessing under the degradation detection submodule is mentioned in Degradation_Detection/preprocessing.py file. It consists of five different functions: 
 
-# Construct model
-model = Model("optimization")
+a. **Converting KW to MW**: This is mentioned in the function convert_kw_to_mw. Some power data has the unit mentioned in KW. Therefore the raw data preprocessing module converts them to MW. 
 
-# Initialize variables
-for j in range(1, Omega + 1, W):
-    for i in range(1, M + 1):
-        model.addConstr(l_temp[j, i, 0] == degradation[i], name='Initialization (1)_%d,%d' % (j, i))
-...
+b. **Preprocess Vibration**: This is mentioned in the function preprocess_Vibration. Not all vibration data has same length. Therefore converting them to pandas dataframe generates NaN value. The preprocess_Vibration converts those NaN to zero values. Later, the zero values are removed from our analysis. We assume the powerplant is not operational during those period.
 
-# Update the model - Couple the maintenance status with preventive and corrective maintenance decisions.
-for w in range(1, Omega + 1):
-    for i in range(1, M + 1):
-        for t in range(0, T + 1):
-            model.addConstr(m[w, i, t] == quicksum(v[w, i, s] for s in range(max(0, t - Y_p + 1), t + 1))
-                            + quicksum(r[w, i, s] for s in range(max(0, t - Y_c + 1), t + 1)),
-                            name='Constraint (14)_%d,%d,%d' % (w, i, t))
-            # An asset cannot be in failure mode if a failure was not started until time t.
-            model.addConstr(f[w, i, t] <= quicksum(q[w, i, s] for s in range(0, t + 1)),
-                            name='Constraint (Q)_%d,%d,%d' % (w, i, t))
-            # A degradation level must be less than or equal to the failure threshold
-            model.addConstr(l[w, i, t] <= Lamda, name='Constraint (15)_%d,%d,%d' % (w, i, t))
-            # A crew visit must be scheduled to location k in scenario w, if a maintenance or an inspection is
-            # scheduled for asset i in that location.
-            model.addConstr(m[w, i, t] <= visit[w, t], name='Constraint (20)_%d,%d,%d' % (w, i, t))
-            model.addConstr(z[i, t] <= visit[w, t], name='Constraint (21)_%d,%d,%d' % (w, i, t))
-            # If a failure occurs at time t, then a preventive maintenance cannot be started for the asset in that
-            # scenario.
-            model.addConstr(1 - f[w, i, t] >= v[w, i, t], name='Constraint (16)_%d,%d,%d' % (w, i, t))
-            # Each period that the asset is not in failure mode or under maintenance, the asset is available.
-            model.addConstr(a[w, i, t] == 1 - f[w, i, t] - m[w, i, t], name='Availability_%d,%d,%d' % (w, i, t))
-        # If an asset was in failure status until time t − 1, but not in time t, then a corrective maintenance must
-        # be started for the asset in that scenario.
-        for t in range(1, T + 1):
-            model.addConstr(f[w, i, t - 1] - f[w, i, t] <= r[w, i, t], name='Constraint (17)_%d,%d,%d' % (w, i, t))
-# If a visit to location k is not possible during maintenance period t in scenario w, then the maintenance crew
-# cannot conduct maintenance, or inspection at that location.
-for w in range(1, Omega + 1):
-    for t in range(0, T + 1):
-        model.addConstr(visit[w, t] <= avail[w, t], name='Constraint (22)_%d,%d' % (w, t))
+c. **Finding common powerhouse**: find_common_powerhouses is used for this functionality. The power data and vibration data of turbine is not sorted in the same order. There are many common powerhouses in both the datasets. We utilize only those common power houses. 
 
-...
+d. **Creating clean csv files each for both power and vibration**: This is done by create_clean_csv. It runs the above three functions and create a cleaner csv file one each for power and vibration. 
 
-model.update()
+e. **Matching timestamps of power and vibration data**: This is done by trim_power_file. In our analysis we found the vibration data to have a longer time range than the power data. Hence we trimmed the cleaner power csv file to match the time stamps of the vibration data. 
 
-model.modelSense = GRB.MINIMIZE
-model.optimize()
-model.write('output.lp')
-```
+#### CORRELATION ANALYSIS 
+
+Once the cleaner (and time stamped matched) power and vibration data are available, the next objective is to analyze the correlation between the data. The power data can explain the vibration only if there is a non-zero correlation between them. However, it must be kept in mind that both power and vibration are time-series dataset. Therefore a rolling window based correlation must be done to check the temporal correlations. It must also be noted that these correlation analysis are done per powerhouse. Therefore, it is theoretically possible that for some powerhouses power and vibration are correlated but not for others, depending on the operational HRI data.  
+
+The code for doing correlation analysis is found in Degradation_Detection/CorrelationAnalysis.py. It utilizes a rolling median based pearson correlation analysis to analyze and plot the correlations between power-vibration of the turbine. 
+
+#### DEGRADATION DETECTION (MAIN CODE)
+
+The pearson correlation is a simple mechanism to analyze the inter-dependencies between power and vibration data of a powerhouse. However, the true correlation might be complex enough for pearson correlation to visualize. Therefore, we utilize a neural network based method to analyze the correlation and subsequently flag abnormal vibrations in a turbine. 
+
+This functionality is mentioned in Degradation_Detection/DegraationDetection.py code. It involves training a LSTM that takes input of the past timesteps of both power and vibration to predict the future vibrations. The current version in the code utilizes last 90 days of power and vibration dat to predict the next 30 days of data. The LSTM training parameters are chosen at random and cross-validation is done manually. Users can do their own cross-validation depending on the dataset. 
+
+Once the LSTM is trained, for the test dataset we provide power and vibration timeseries and put a threshold on the residuals (square of L2 norm of prediction - true) of the predicted vibration. High residuals are inferred as abnormal vibrations i.e., observations that could not be explained due to power generated by the powerhouse. 
+### RUL ESTIMATION 
+
+Once the degraded turbine bearings are detected using the "Degradation Detection" submodule, the next task is to predict its Remaining Useful Life probabilistically. We utilize a random mixed coefficient model with exponential functional form for bearing vibrations. In addition the random parameters in the model are updated in a Bayesian manner using the most recent vibration data. The code is mentioned in RUL_Estimation/Prognostics/ExponentialModel.py.
+
+The code outputs a Remaining Lifetime Distribution (RLD) and the median of that distribution as the RUL of the bearing. Prediction errors are also plotted to understand the confidence interval of the prediction. The code for plotting those are mentioned in RUL_Estimation/ResultsPlotting.py. 
 
 ## Authors
 * **Ayush Mohanty** (Wayne State University)
@@ -72,12 +64,6 @@ model.write('output.lp')
 ## Acknowledgments
 
 * This material is based upon work supported by the U.S. Department of Energy, Office of Energy Efficiency and Renewable Energy (EERE), specifically the **Water Power Technology Office (WPTO)**, under hydro power lab call project "A New Generation of Domain-Informed Models for Degradation and Prognostics in Hydro-Components: Co-Developing an Open Source Tool by Harnessing HRI Data, Industry Records and Physical Models". 
-
-## Citing
-
-If you use this tool in your research (instances, models or algorithms), we kindly request that you cite the package as follows:
-
-* Ayush Mohanty, Shijia Zhao, Feng Qiu, and Murat Yildirim. **“TBD1”**, submitted to IEEE Transactions on TBD2, 2024
 
 
 ## License
