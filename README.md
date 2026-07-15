@@ -1,4 +1,5 @@
 # Domain-informed Models for Degradation and Prognostics in Hydro Components
+*This repository has been archived and is no longer maintained. The code is provided for historical reference and may contain unpatched or unknown vulnerabilities. It should not be used in production systems.*
 
 **Domain-informed Models for Degradation and Prognostics in Hydro Components** is an open-source prototype tool for degradation and prognostics for hydro components. Example usages are demonstrated on pilot component - bearings. 
 
